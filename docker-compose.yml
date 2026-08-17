@@ -6,8 +6,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: library123
       POSTGRES_DB: library
-    ports:
-      - "5432:5432"
 
   adminer:
     image: adminer
