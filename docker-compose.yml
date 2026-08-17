@@ -1,0 +1,17 @@
+services:
+  db:
+    build: .
+    image: metropolis-library-db:1.0
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: library123
+      POSTGRES_DB: library
+    ports:
+      - "5432:5432"
+
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
