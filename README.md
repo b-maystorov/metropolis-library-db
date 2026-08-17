@@ -13,7 +13,9 @@ The database manages:
 - members
 - loans
 
-The database runs inside Docker and includes **Adminer** as a web-based GUI for viewing tables and running SQL queries.
+The project runs with **Docker Compose** and includes **Adminer** as a web-based GUI for viewing tables, editing data, and running SQL queries.
+
+---
 
 ## Technologies
 
@@ -24,16 +26,21 @@ The database runs inside Docker and includes **Adminer** as a web-based GUI for 
 - SQL
 - Git / GitHub
 
+---
+
 ## Architecture
 
-The project uses two containers:
+The project uses two Docker containers:
 
 ```text
 Browser
    |
+   | localhost:8080
    v
 Adminer
    |
+   | Docker internal network
+   | Server: db
    v
 PostgreSQL
    |
@@ -41,15 +48,25 @@ PostgreSQL
 Metropolis Library Database
 ```
 
+The PostgreSQL database is **not exposed directly to the host computer**.
+
+Adminer communicates with PostgreSQL internally using the Docker Compose service name:
+
+```text
+db
+```
+
+This avoids conflicts with other PostgreSQL databases that may already use port `5432` on the host computer.
+
 `schema.sql` creates the database structure.
 
 `sample_data.sql` inserts example data.
 
-The Docker image is built using the provided `Dockerfile`.
+The PostgreSQL image is built using the provided `Dockerfile`.
+
+---
 
 ## Database Structure
-
-The database contains the following tables:
 
 | Table             | Purpose                                                |
 | ----------------- | ------------------------------------------------------ |
@@ -62,13 +79,15 @@ The database contains the following tables:
 | `members`         | Stores library member information                      |
 | `loans`           | Stores borrowing and return information                |
 
-The connection tables `book_authors` and `book_categories` are used for many-to-many relationships.
+The tables `book_authors` and `book_categories` are junction tables used for many-to-many relationships.
 
 ---
 
-## How to Start the Project
+# How to Start the Project
 
-### 1. Clone the repository
+## 1. Clone the repository
+
+If GitHub SSH is configured:
 
 ```bash
 git clone git@github.com:b-maystorov/metropolis-library-db.git
@@ -80,7 +99,7 @@ Enter the project folder:
 cd metropolis-library-db
 ```
 
-### 2. Start the containers
+## 2. Start the containers
 
 ```bash
 docker compose up -d --build
@@ -91,7 +110,7 @@ This starts:
 - PostgreSQL
 - Adminer
 
-Check if both containers are running:
+Check that both containers are running:
 
 ```bash
 docker compose ps
@@ -99,9 +118,9 @@ docker compose ps
 
 ---
 
-## Adminer Login
+# Adminer Login
 
-Open:
+Open in your browser:
 
 ```text
 http://localhost:8080
@@ -117,11 +136,21 @@ Password: library123
 Database: library
 ```
 
-After logging in, the library tables should appear on the left side.
+Important:
 
-You can now view the data or execute SQL queries directly through Adminer.
+```text
+Server: db
+```
 
-## Example SQL Queries
+Do **not** use `localhost` as the database server in Adminer.
+
+`db` is the Docker Compose service name of the PostgreSQL container.
+
+After logging in, the database tables should appear on the left side.
+
+---
+
+# Example SQL Queries
 
 Show all books:
 
@@ -159,17 +188,53 @@ WHERE return_date IS NULL;
 
 ---
 
-## Troubleshooting
+# Troubleshooting
 
-### Port 5432 is already in use
+## Adminer cannot connect
 
-Check running containers:
+First check whether both containers are running:
+
+```bash
+docker compose ps
+```
+
+Make sure the Adminer login uses:
+
+```text
+Server: db
+```
+
+If a container is not running, check the logs:
+
+```bash
+docker compose logs
+```
+
+Database logs only:
+
+```bash
+docker compose logs db
+```
+
+Adminer logs only:
+
+```bash
+docker compose logs adminer
+```
+
+---
+
+## Port 8080 is already in use
+
+Adminer uses host port `8080`.
+
+Check running Docker containers:
 
 ```bash
 docker ps
 ```
 
-Stop the container using PostgreSQL:
+If another container is already using port `8080`, stop it:
 
 ```bash
 docker stop <container-name>
@@ -181,41 +246,122 @@ Then start the project again:
 docker compose up -d
 ```
 
-### Port 8080 is already in use
+Alternatively, change the Adminer port in `docker-compose.yml`.
 
-Check which container is using the port:
+For example:
 
-```bash
-docker ps
+```yaml
+ports:
+  - "8081:8080"
 ```
 
-Stop the conflicting container or change the Adminer port in `docker-compose.yml`.
-
-### Adminer cannot connect
-
-Make sure the login uses:
+Adminer would then be available at:
 
 ```text
-Server: db
+http://localhost:8081
 ```
 
-Do not use `localhost` as the database server inside Adminer.
+---
 
-Check the containers:
+## PostgreSQL port 5432
+
+The PostgreSQL container does **not** publish port `5432` to the host computer.
+
+This is intentional.
+
+Adminer connects directly to PostgreSQL through Docker's internal network:
+
+```text
+Adminer -> db:5432
+```
+
+Therefore, another PostgreSQL database using port `5432` on the host should not conflict with this project.
+
+---
+
+## Database tables are missing
+
+Check the container status:
 
 ```bash
 docker compose ps
 ```
 
-View errors:
+Then check the database logs:
 
 ```bash
-docker compose logs
+docker compose logs db
 ```
 
-### Database tables are missing
+To recreate the project from the original SQL files:
 
-Rebuild the project:
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+This creates a fresh PostgreSQL container and runs:
+
+```text
+schema.sql
+sample_data.sql
+```
+
+again.
+
+---
+
+# Stop and Start the Project
+
+To temporarily stop the containers without deleting them:
+
+```bash
+docker compose stop
+```
+
+Start them again:
+
+```bash
+docker compose start
+```
+
+## Remove and recreate the project
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+### Important
+
+The project currently does **not** use a PostgreSQL Docker volume.
+
+This means that changes made only inside the running database or through Adminer can be lost when the database container is removed with:
+
+```bash
+docker compose down
+```
+
+The database will then be recreated from:
+
+```text
+schema.sql
+sample_data.sql
+```
+
+Official changes to the database structure should therefore also be added to the SQL files in the repository.
+
+---
+
+# Getting Updates
+
+If the repository has already been cloned and a newer version is available:
+
+```bash
+git pull
+```
+
+Then rebuild and start the updated project:
 
 ```bash
 docker compose down
@@ -224,21 +370,7 @@ docker compose up -d --build
 
 ---
 
-## Stop the Project
-
-```bash
-docker compose down
-```
-
-Start it again:
-
-```bash
-docker compose up -d
-```
-
----
-
-## Project Files
+# Project Files
 
 ```text
 metropolis-library-db/
